@@ -433,6 +433,8 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
   document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
   document.getElementById('tab-' + name).classList.remove('hidden');
+  document.getElementById('queryMeta').textContent = '';
+  document.getElementById('queryResult').innerHTML = '';
 }
 
 async function applyFilters() {

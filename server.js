@@ -177,7 +177,7 @@ function winEstimate(row) {
   const m = row.margin || 0;
 
   if (row.status === 'Won' || row.status === 'Result Declared') {
-    return { label: 'Won', confidence: 100, color: '#16a34a' };
+    return { label: 'Declared', confidence: 100, color: '#052e16' };
   }
   if (completion >= 0.90 && m > 25000) return { label: 'Certain', confidence: 99, color: '#15803d' };
   if (completion >= 0.85 && m > 15000) return { label: 'Very Likely', confidence: 95, color: '#16a34a' };
@@ -385,11 +385,7 @@ const server = http.createServer((req, res) => {
           if (f.progress === 'early') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) < 0.4');
           else if (f.progress === 'mid') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) >= 0.4 AND CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) < 0.7');
           else if (f.progress === 'nearly_done') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) >= 0.7');
-        }
-
-        if (f.status) {
-          conditions.push('status = ?');
-          params.push(f.status);
+          else if (f.progress === 'declared') conditions.push("status = 'Result Declared'");
         }
 
         const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';

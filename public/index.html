@@ -119,6 +119,7 @@
         <select id="filterParty" onchange="renderMain()"><option value="">All Parties</option></select>
         <select id="filterEstimate" onchange="renderMain()">
           <option value="">All Estimates</option>
+          <option value="Declared">Declared</option>
           <option value="Certain">Certain</option>
           <option value="Very Likely">Very Likely</option>
           <option value="Likely">Likely</option>
@@ -153,6 +154,7 @@
       <div class="legend" style="margin-top:1rem">
         <h4>Win Estimate Legend</h4>
         <div class="legend-grid">
+          <div class="legend-item"><div class="legend-dot" style="background:#052e16"></div> Declared — result finalized</div>
           <div class="legend-item"><div class="legend-dot" style="background:#15803d"></div> Certain — >90% rounds, margin >25k</div>
           <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Very Likely — >85% rounds, margin >15k</div>
           <div class="legend-item"><div class="legend-dot" style="background:#65a30d"></div> Likely — >75% rounds, margin >10k</div>
@@ -209,14 +211,7 @@
           <span class="chip" data-cat="progress" data-val="early">Early (&lt;40%)</span>
           <span class="chip" data-cat="progress" data-val="mid">Mid (40-70%)</span>
           <span class="chip" data-cat="progress" data-val="nearly_done">Nearly Done (&gt;70%)</span>
-        </div>
-      </div>
-      <div class="filter-group">
-        <div class="filter-label">Status</div>
-        <div class="filter-chips" id="statusChips">
-          <span class="chip selected" data-cat="status" data-val="">Any</span>
-          <span class="chip" data-cat="status" data-val="Result in Progress">In Progress</span>
-          <span class="chip" data-cat="status" data-val="Result Declared">Declared</span>
+          <span class="chip" data-cat="progress" data-val="declared">Declared</span>
         </div>
       </div>
       <div class="filter-actions">
@@ -420,7 +415,7 @@ function renderResultTable(rows) {
 
 // ─── Filter Chips ───
 function getFilterState() {
-  const state = { party: '', side: 'leading', margin: '', progress: '', status: '' };
+  const state = { party: '', side: 'leading', margin: '', progress: '' };
   document.querySelectorAll('.chip.selected').forEach(chip => {
     const cat = chip.dataset.cat;
     const val = chip.dataset.val;
@@ -464,7 +459,6 @@ async function applyFilters() {
     if (f.side && f.side !== 'leading') labelParts.push(f.side);
     if (f.margin) labelParts.push(f.margin);
     if (f.progress) labelParts.push(f.progress.replace('_', ' '));
-    if (f.status) labelParts.push(f.status === 'Result Declared' ? 'Declared' : 'In Progress');
     const label = labelParts.length > 0 ? labelParts.join(' + ') : 'All constituencies';
     meta.textContent = `${label} | ${data.count} rows`;
     result.innerHTML = renderResultTable(data.rows);

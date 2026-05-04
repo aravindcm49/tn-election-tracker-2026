@@ -128,11 +128,6 @@
           <option value="Too Close">Too Close</option>
           <option value="Early">Early</option>
         </select>
-        <select id="filterStatus" onchange="renderMain()">
-          <option value="">All Statuses</option>
-          <option value="Result in Progress">In Progress</option>
-          <option value="Result Declared">Declared</option>
-        </select>
         <div class="count" id="mainCount"></div>
       </div>
       <div class="table-wrap" style="margin-top:.5rem">
@@ -294,13 +289,11 @@ function renderMain() {
   const search = document.getElementById('search').value.toLowerCase();
   const partyFilter = document.getElementById('filterParty').value;
   const estFilter = document.getElementById('filterEstimate').value;
-  const statusFilter = document.getElementById('filterStatus').value;
 
   let filtered = allData.filter(r => {
     if (search && !r.name.toLowerCase().includes(search) && !r.leading_candidate.toLowerCase().includes(search)) return false;
     if (partyFilter && r.leading_party !== partyFilter) return false;
     if (estFilter && r.estimate?.label !== estFilter) return false;
-    if (statusFilter && r.status !== statusFilter) return false;
     return true;
   });
 

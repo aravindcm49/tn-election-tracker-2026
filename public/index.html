@@ -128,6 +128,37 @@
         <button onclick="setQuery('Nearly complete')">Nearly Done</button>
         <button onclick="setQuery('Early counting')">Early</button>
       </div>
+      <div class="toolbar" style="margin-top:1rem">
+        <input type="text" id="search" placeholder="Search constituency..." oninput="renderMain()" />
+        <select id="filterParty" onchange="renderMain()"><option value="">All Parties</option></select>
+        <select id="filterEstimate" onchange="renderMain()">
+          <option value="">All Estimates</option>
+          <option value="Certain">Certain</option>
+          <option value="Very Likely">Very Likely</option>
+          <option value="Likely">Likely</option>
+          <option value="Leaning">Leaning</option>
+          <option value="Edge">Edge</option>
+          <option value="Too Close">Too Close</option>
+          <option value="Early">Early</option>
+        </select>
+        <div class="count" id="mainCount"></div>
+      </div>
+      <div class="table-wrap" style="margin-top:.5rem">
+        <table class="main">
+          <thead>
+            <tr>
+              <th onclick="sort('const_no')">#</th>
+              <th onclick="sort('name')">Constituency</th>
+              <th onclick="sort('leading_party')">Leading</th>
+              <th onclick="sort('margin')">Margin</th>
+              <th onclick="sort('completion_pct')">Rounds</th>
+              <th onclick="sort('estimate.confidence')">Win Estimate</th>
+              <th>Trailing</th>
+            </tr>
+          </thead>
+          <tbody id="mainBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Advanced Tab -->
@@ -185,39 +216,6 @@
 
     <div class="query-meta" id="queryMeta"></div>
     <div class="query-result" id="queryResult"></div>
-  </div>
-
-  <div class="toolbar">
-    <input type="text" id="search" placeholder="Search constituency..." oninput="renderMain()" />
-    <select id="filterParty" onchange="renderMain()"><option value="">All Parties</option></select>
-    <select id="filterEstimate" onchange="renderMain()">
-      <option value="">All Estimates</option>
-      <option value="Certain">Certain</option>
-      <option value="Very Likely">Very Likely</option>
-      <option value="Likely">Likely</option>
-      <option value="Leaning">Leaning</option>
-      <option value="Edge">Edge</option>
-      <option value="Too Close">Too Close</option>
-      <option value="Early">Early</option>
-    </select>
-    <div class="count" id="mainCount"></div>
-  </div>
-
-  <div class="table-wrap">
-    <table class="main">
-      <thead>
-        <tr>
-          <th onclick="sort('const_no')">#</th>
-          <th onclick="sort('name')">Constituency</th>
-          <th onclick="sort('leading_party')">Leading</th>
-          <th onclick="sort('margin')">Margin</th>
-          <th onclick="sort('completion_pct')">Rounds</th>
-          <th onclick="sort('estimate.confidence')">Win Estimate</th>
-          <th>Trailing</th>
-        </tr>
-      </thead>
-      <tbody id="mainBody"></tbody>
-    </table>
   </div>
 
   <div class="legend">

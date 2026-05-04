@@ -86,16 +86,22 @@ function winEstimate(row) {
 }
 
 // ─── Fetch & Store ───
-async function fetchPage(pageNum) {
+async function fetchPage(pageNum, retries = 2) {
   const url = `${ECI_BASE}${pageNum}.htm`;
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const html = await res.text();
-    return parseRows(html);
-  } catch (err) {
-    console.error(`[${new Date().toISOString()}] ERROR fetching page ${pageNum}:`, err.message);
-    return [];
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const rows = parseRows(html);
+      if (rows.length > 0) return rows;
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1000));
+    } catch (err) {
+      console.error(`[${new Date().toISOString()}] ERROR fetching page ${pageNum} (attempt ${attempt + 1}):`, err.message);
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1000));
+    }
   }
+  return [];
 }
 
 async function fetchAndStore() {
@@ -310,6 +316,18 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // API: health check
+  if (pathname === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      hasData: constituencies.size > 0,
+      count: constituencies.size,
+      lastFetch: Array.from(constituencies.values())[0]?.updated_at || null,
+      isFetching
+    }));
     return;
   }
 

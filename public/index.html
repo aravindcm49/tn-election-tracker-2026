@@ -295,6 +295,9 @@ function renderFromData(cData, pData) {
   populatePartyFilter();
 }
 
+let retryCount = 0;
+const MAX_RETRIES = 10;
+
 async function load() {
   // 1. Try to render from IndexedDB cache immediately
   let cached = null;
@@ -323,17 +326,38 @@ async function load() {
       await idbSet(STORE_DATA, 'constituencies', fresh);
       await idbSet(STORE_DATA, 'parties', freshParties);
       await idbSet(STORE_META, 'lastFetch', Date.now());
+      retryCount = 0;
 
       renderFromData(fresh, freshParties);
-    } else if (!cached) {
-      // No cache and no fresh data → server cold-starting
-      document.getElementById('lastUpdate').textContent = 'Loading data...';
-      setTimeout(load, 3000);
+    } else {
+      // Server returned empty — DON'T cache empty data
+      console.warn('Server returned empty data');
+      if (!cached) {
+        retryCount++;
+        if (retryCount <= MAX_RETRIES) {
+          const delay = Math.min(3000 * retryCount, 15000);
+          document.getElementById('lastUpdate').textContent = `Waiting for data... (retry ${retryCount}/${MAX_RETRIES})`;
+          setTimeout(load, delay);
+        } else {
+          document.getElementById('lastUpdate').textContent = 'Server cannot reach ECI. Try running locally.';
+        }
+      } else {
+        document.getElementById('lastUpdate').textContent = 'Server empty — showing cached data';
+      }
     }
   } catch (e) {
     console.error('API fetch error', e);
     if (!cached) {
-      document.getElementById('lastUpdate').textContent = 'Error loading data';
+      retryCount++;
+      if (retryCount <= MAX_RETRIES) {
+        const delay = Math.min(3000 * retryCount, 15000);
+        document.getElementById('lastUpdate').textContent = `Connection error... (retry ${retryCount}/${MAX_RETRIES})`;
+        setTimeout(load, delay);
+      } else {
+        document.getElementById('lastUpdate').textContent = 'Cannot connect to server.';
+      }
+    } else {
+      document.getElementById('lastUpdate').textContent = 'Connection failed — showing cached data';
     }
   }
 }

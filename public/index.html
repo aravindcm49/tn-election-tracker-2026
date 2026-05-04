@@ -232,26 +232,109 @@ let partyData = [];
 let sortCol = 'margin';
 let sortDir = -1;
 
+// ─── IndexedDB ───
+const DB_NAME = 'tn-election-tracker';
+const DB_VERSION = 1;
+const STORE_DATA = 'data';
+const STORE_META = 'meta';
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_DATA)) db.createObjectStore(STORE_DATA);
+      if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META);
+    };
+  });
+}
+
+async function idbGet(store, key) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSet(store, key, value) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbClear() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx1 = db.transaction(STORE_DATA, 'readwrite');
+    tx1.objectStore(STORE_DATA).clear();
+    tx1.oncomplete = () => {
+      const tx2 = db.transaction(STORE_META, 'readwrite');
+      tx2.objectStore(STORE_META).clear();
+      tx2.oncomplete = () => resolve();
+      tx2.onerror = () => reject(tx2.error);
+    };
+    tx1.onerror = () => reject(tx1.error);
+  });
+}
+
+function renderFromData(cData, pData) {
+  allData = cData;
+  partyData = pData;
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+  renderParties();
+  renderMain();
+  populatePartyFilter();
+}
+
 async function load() {
+  // 1. Try to render from IndexedDB cache immediately
+  let cached = null;
+  try {
+    cached = await idbGet(STORE_DATA, 'constituencies');
+    const cachedParties = await idbGet(STORE_DATA, 'parties');
+    if (cached && cached.length > 0) {
+      renderFromData(cached, cachedParties || []);
+      document.getElementById('lastUpdate').textContent = 'From cache — refreshing...';
+    }
+  } catch (e) {
+    console.log('IDB read error', e);
+  }
+
+  // 2. Fetch fresh from API
   try {
     const [cRes, pRes] = await Promise.all([
       fetch('/api/constituencies'),
       fetch('/api/parties')
     ]);
-    allData = await cRes.json();
-    partyData = await pRes.json();
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-    renderParties();
-    renderMain();
-    populatePartyFilter();
-    // If data is empty, server might be cold-starting; retry in 3s
-    if (allData.length === 0) {
+    const fresh = await cRes.json();
+    const freshParties = await pRes.json();
+
+    if (fresh.length > 0) {
+      // Store in IndexedDB
+      await idbSet(STORE_DATA, 'constituencies', fresh);
+      await idbSet(STORE_DATA, 'parties', freshParties);
+      await idbSet(STORE_META, 'lastFetch', Date.now());
+
+      renderFromData(fresh, freshParties);
+    } else if (!cached) {
+      // No cache and no fresh data → server cold-starting
       document.getElementById('lastUpdate').textContent = 'Loading data...';
       setTimeout(load, 3000);
     }
   } catch (e) {
-    console.error(e);
-    document.getElementById('lastUpdate').textContent = 'Error loading data';
+    console.error('API fetch error', e);
+    if (!cached) {
+      document.getElementById('lastUpdate').textContent = 'Error loading data';
+    }
   }
 }
 

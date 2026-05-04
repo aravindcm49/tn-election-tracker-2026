@@ -114,21 +114,7 @@
 
     <!-- Simple Tab -->
     <div id="tab-simple" class="tab-panel">
-      <div class="query-input">
-        <input type="text" id="queryInput" placeholder="e.g., Show close fights, TVK seats..." />
-        <button onclick="runQuery()">Run</button>
-      </div>
-      <div class="presets">
-        <button onclick="setQuery('Show party summary')">Party Summary</button>
-        <button onclick="setQuery('TVK leading')">TVK</button>
-        <button onclick="setQuery('DMK leading')">DMK</button>
-        <button onclick="setQuery('ADMK leading')">ADMK</button>
-        <button onclick="setQuery('Close fights')">Close Fights</button>
-        <button onclick="setQuery('High margin')">Safe Seats</button>
-        <button onclick="setQuery('Nearly complete')">Nearly Done</button>
-        <button onclick="setQuery('Early counting')">Early</button>
-      </div>
-      <div class="toolbar" style="margin-top:1rem">
+      <div class="toolbar">
         <input type="text" id="search" placeholder="Search constituency..." oninput="renderMain()" />
         <select id="filterParty" onchange="renderMain()"><option value="">All Parties</option></select>
         <select id="filterEstimate" onchange="renderMain()">

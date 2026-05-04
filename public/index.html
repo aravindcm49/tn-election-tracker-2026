@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TN Election Tracker 2026</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: auto; min-height: 100%; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; background: #f3f4f6; }
+  header { background: #1e3a5f; color: white; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  .live-dot { width: 10px; height: 10px; background: #22c55e; border-radius: 50%; display: inline-block; margin-right: 6px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .container { max-width: 1400px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+
+  .party-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .party-card { background: white; border-radius: 10px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); text-align: center; }
+  .party-card .party-name { font-size: .85rem; color: #6b7280; text-transform: uppercase; letter-spacing: .5px; }
+  .party-card .seats { font-size: 2rem; font-weight: 700; color: #1e3a5f; }
+  .party-card .sub { font-size: .75rem; color: #9ca3af; margin-top: 4px; }
+
+  .query-box { background: white; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .query-box h3 { margin: 0 0 .75rem; font-size: 1rem; }
+  .query-input { display: flex; gap: .5rem; margin-bottom: .75rem; }
+  .query-input input { flex: 1; padding: .6rem .8rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: .95rem; }
+  .query-input button { padding: .6rem 1.2rem; background: #1e3a5f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: .9rem; }
+  .query-input button:hover { background: #2c5282; }
+  .filter-group { margin-bottom: .6rem; }
+  .filter-label { font-size: .75rem; color: #6b7280; text-transform: uppercase; letter-spacing: .3px; margin-bottom: .3rem; }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .chip { padding: .3rem .6rem; border: 1px solid #d1d5db; background: #f9fafb; border-radius: 4px; cursor: pointer; font-size: .8rem; white-space: nowrap; }
+  .chip:hover { background: #e5e7eb; }
+  .chip.selected { background: #1e3a5f; color: white; border-color: #1e3a5f; }
+  .chip.selected:hover { background: #2c5282; }
+  .filter-actions { display: flex; gap: .5rem; margin-top: .75rem; align-items: center; }
+  .filter-actions button { padding: .5rem 1rem; background: #1e3a5f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: .85rem; }
+  .filter-actions button:hover { background: #2c5282; }
+  .filter-actions button.secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+  .filter-actions button.secondary:hover { background: #e5e7eb; }
+  .query-result { margin-top: .75rem; overflow-x: auto; max-height: 320px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+  .query-result table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .query-result th, .query-result td { padding: .4rem .6rem; border-bottom: 1px solid #e5e7eb; text-align: left; }
+  .query-result th { background: #f9fafb; font-weight: 600; }
+  .query-meta { font-size: .75rem; color: #6b7280; margin-top: .3rem; }
+
+  .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-bottom: .75rem; }
+  .toolbar input, .toolbar select { padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem; }
+  .toolbar .count { margin-left: auto; font-size: .85rem; color: #6b7280; }
+
+  .table-wrap { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.1); overflow: hidden; max-height: 600px; overflow-y: auto; }
+  @media (max-width: 768px) {
+    .table-wrap { max-height: 50vh; }
+    .container { padding-bottom: 5rem; }
+  }
+  table.main { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.main thead { background: #1e3a5f; color: white; }
+  table.main th { padding: .7rem .8rem; text-align: left; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; background: #1e3a5f; }
+  table.main th:hover { background: #2c5282; }
+  table.main td { padding: .55rem .8rem; border-bottom: 1px solid #e5e7eb; }
+  table.main tr:hover { background: #f9fafb; }
+  table.main td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .badge { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .progress-bg { background: #e5e7eb; border-radius: 4px; height: 6px; width: 60px; display: inline-block; }
+  .progress-fill { height: 100%; border-radius: 4px; background: #3b82f6; }
+
+  .legend { background: white; border-radius: 10px; padding: 1rem; padding-bottom: 2rem; margin-top: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-size: .85rem; }
+  .legend h4 { margin: 0 0 .5rem; }
+  .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .4rem; }
+  .legend-item { display: flex; align-items: center; gap: .4rem; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  .detail-panel { background: white; border-radius: 10px; padding: 1rem; margin-top: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .detail-panel h4 { margin: 0 0 .5rem; }
+  .history-row { display: flex; gap: 1rem; font-size: .8rem; border-bottom: 1px solid #e5e7eb; padding: .3rem 0; }
+  .history-row span { min-width: 80px; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <span class="live-dot"></span>
+    <h1>Tamil Nadu Election 2026 — Live Tracker</h1>
+  </div>
+  <div style="font-size:.85rem;display:flex;align-items:center;gap:.5rem">
+    Last update: <span id="lastUpdate">—</span>
+    <button onclick="refresh()" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;color:white" title="Refresh now">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+    </button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="party-grid" id="partyGrid"></div>
+
+  <div class="query-box">
+    <h3>Filters</h3>
+    <div class="filter-group">
+      <div class="filter-label">Party</div>
+      <div class="filter-chips" id="partyChips">
+        <span class="chip selected" data-cat="party" data-val="">Any</span>
+        <span class="chip" data-cat="party" data-val="Tamilaga Vettri Kazhagam">TVK</span>
+        <span class="chip" data-cat="party" data-val="Dravida Munnetra Kazhagam">DMK</span>
+        <span class="chip" data-cat="party" data-val="All India Anna Dravida Munnetra Kazhagam">ADMK</span>
+        <span class="chip" data-cat="party" data-val="Pattali Makkal Katchi">PMK</span>
+        <span class="chip" data-cat="party" data-val="Indian National Congress">INC</span>
+        <span class="chip" data-cat="party" data-val="Bharatiya Janata Party">BJP</span>
+        <span class="chip" data-cat="party" data-val="Communist Party of India">CPI</span>
+        <span class="chip" data-cat="party" data-val="Communist Party of India (Marxist)">CPI(M)</span>
+        <span class="chip" data-cat="party" data-val="Viduthalai Chiruthaigal Katchi">VCK</span>
+        <span class="chip" data-cat="party" data-val="Desiya Murpokku Dravida Kazhagam">DMDK</span>
+        <span class="chip" data-cat="party" data-val="Indian Union Muslim League">IUML</span>
+        <span class="chip" data-cat="party" data-val="Amma Makkal Munnettra Kazagam">AMMK</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-label">Side</div>
+      <div class="filter-chips" id="sideChips">
+        <span class="chip selected" data-cat="side" data-val="leading">Leading</span>
+        <span class="chip" data-cat="side" data-val="either">Either Side</span>
+        <span class="chip" data-cat="side" data-val="trailing">Trailing</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-label">Margin</div>
+      <div class="filter-chips" id="marginChips">
+        <span class="chip selected" data-cat="margin" data-val="">Any</span>
+        <span class="chip" data-cat="margin" data-val="close">Close (&lt;3k)</span>
+        <span class="chip" data-cat="margin" data-val="competitive">Competitive (3k-10k)</span>
+        <span class="chip" data-cat="margin" data-val="comfortable">Comfortable (10k-20k)</span>
+        <span class="chip" data-cat="margin" data-val="safe">Safe (&gt;20k)</span>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-label">Progress</div>
+      <div class="filter-chips" id="progressChips">
+        <span class="chip selected" data-cat="progress" data-val="">Any</span>
+        <span class="chip" data-cat="progress" data-val="early">Early (&lt;40%)</span>
+        <span class="chip" data-cat="progress" data-val="mid">Mid (40-70%)</span>
+        <span class="chip" data-cat="progress" data-val="nearly_done">Nearly Done (&gt;70%)</span>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button onclick="applyFilters()">Apply Filters</button>
+      <button class="secondary" onclick="clearFilters()">Clear</button>
+      <button class="secondary" onclick="runQueryLegacy('Show party summary')">Party Summary</button>
+    </div>
+    <div class="query-meta" id="queryMeta"></div>
+    <div class="query-result" id="queryResult"></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Search constituency..." oninput="renderMain()" />
+    <select id="filterParty" onchange="renderMain()"><option value="">All Parties</option></select>
+    <select id="filterEstimate" onchange="renderMain()">
+      <option value="">All Estimates</option>
+      <option value="Certain">Certain</option>
+      <option value="Very Likely">Very Likely</option>
+      <option value="Likely">Likely</option>
+      <option value="Leaning">Leaning</option>
+      <option value="Edge">Edge</option>
+      <option value="Too Close">Too Close</option>
+      <option value="Early">Early</option>
+    </select>
+    <div class="count" id="mainCount"></div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="main">
+      <thead>
+        <tr>
+          <th onclick="sort('const_no')">#</th>
+          <th onclick="sort('name')">Constituency</th>
+          <th onclick="sort('leading_party')">Leading</th>
+          <th onclick="sort('margin')">Margin</th>
+          <th onclick="sort('completion_pct')">Rounds</th>
+          <th onclick="sort('estimate.confidence')">Win Estimate</th>
+          <th>Trailing</th>
+        </tr>
+      </thead>
+      <tbody id="mainBody"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <h4>Win Estimate Legend</h4>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-dot" style="background:#15803d"></div> Certain — >90% rounds, margin >25k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Very Likely — >85% rounds, margin >15k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#65a30d"></div> Likely — >75% rounds, margin >10k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#84cc16"></div> Leaning — >65% rounds, margin >5k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div> Edge — >55% rounds, margin >2k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Too Close — margin <1k</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#9ca3af"></div> Early — <40% rounds counted</div>
+    </div>
+  </div>
+
+  <div class="detail-panel hidden" id="detailPanel">
+    <h4 id="detailTitle">History</h4>
+    <div id="detailContent"></div>
+  </div>
+
+</div>
+
+<script>
+let allData = [];
+let partyData = [];
+let sortCol = 'margin';
+let sortDir = -1;
+
+async function load() {
+  try {
+    const [cRes, pRes] = await Promise.all([
+      fetch('/api/constituencies'),
+      fetch('/api/parties')
+    ]);
+    allData = await cRes.json();
+    partyData = await pRes.json();
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    renderParties();
+    renderMain();
+    populatePartyFilter();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function refresh() {
+  document.getElementById('lastUpdate').textContent = 'Refreshing...';
+  await load();
+}
+
+function renderParties() {
+  const el = document.getElementById('partyGrid');
+  el.innerHTML = partyData.map(p => `
+    <div class="party-card">
+      <div class="party-name">${p.party.replace(/\s*-\s*.+$/, '')}</div>
+      <div class="seats">${p.seats}</div>
+      <div class="sub">Avg margin: ${Number(p.avg_margin).toLocaleString()}</div>
+      <div class="sub">Avg completion: ${p.avg_completion}%</div>
+    </div>
+  `).join('');
+}
+
+function populatePartyFilter() {
+  const sel = document.getElementById('filterParty');
+  const parties = [...new Set(allData.map(d => d.leading_party))].sort();
+  sel.innerHTML = '<option value="">All Parties</option>' +
+    parties.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
+function sort(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  renderMain();
+}
+
+function getSortVal(row, col) {
+  if (col === 'estimate.confidence') return row.estimate?.confidence || 0;
+  if (col === 'completion_pct') return row.completion_pct || 0;
+  return row[col] || 0;
+}
+
+function renderMain() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const partyFilter = document.getElementById('filterParty').value;
+  const estFilter = document.getElementById('filterEstimate').value;
+
+  let filtered = allData.filter(r => {
+    if (search && !r.name.toLowerCase().includes(search) && !r.leading_candidate.toLowerCase().includes(search)) return false;
+    if (partyFilter && r.leading_party !== partyFilter) return false;
+    if (estFilter && r.estimate?.label !== estFilter) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const av = getSortVal(a, sortCol);
+    const bv = getSortVal(b, sortCol);
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+
+  document.getElementById('mainCount').textContent = `${filtered.length} constituencies`;
+
+  const tbody = document.getElementById('mainBody');
+  tbody.innerHTML = filtered.map(r => {
+    const est = r.estimate || {};
+    const pct = r.completion_pct || 0;
+    return `
+      <tr style="cursor:pointer" onclick="showHistory('${r.name.replace(/'/g,"\\'")}')">
+        <td class="num">${r.const_no}</td>
+        <td><strong>${r.name}</strong><br><span style="color:#6b7280;font-size:.75rem">${r.status}</span></td>
+        <td>
+          <div>${r.leading_candidate}</div>
+          <div style="font-size:.75rem;color:#4b5563">${r.leading_party}</div>
+        </td>
+        <td class="num" style="font-weight:600">${r.margin.toLocaleString()}</td>
+        <td class="num">
+          <div style="margin-bottom:2px">${r.rounds_completed}/${r.total_rounds}</div>
+          <div class="progress-bg"><div class="progress-fill" style="width:${pct}%;background:${pct>80?'#16a34a':pct>50?'#3b82f6':'#9ca3af'}"></div></div>
+          <div style="font-size:.7rem;color:#6b7280;margin-top:2px">${pct.toFixed(1)}%</div>
+        </td>
+        <td>
+          <span class="badge" style="background:${est.color}22;color:${est.color};border:1px solid ${est.color}44">${est.label}</span>
+          <div style="font-size:.7rem;color:#6b7280;margin-top:2px">${est.confidence}% conf</div>
+        </td>
+        <td>
+          <div>${r.trailing_candidate}</div>
+          <div style="font-size:.75rem;color:#4b5563">${r.trailing_party}</div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function showHistory(name) {
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+  document.getElementById('detailTitle').textContent = `History: ${name}`;
+  panel.classList.remove('hidden');
+  content.innerHTML = '<div style="color:#6b7280">Loading...</div>';
+  try {
+    const res = await fetch('/api/history/' + encodeURIComponent(name));
+    const rows = await res.json();
+    if (rows.length === 0) {
+      content.innerHTML = '<div style="color:#6b7280">No history yet.</div>';
+      return;
+    }
+    content.innerHTML = rows.slice(0, 15).map(r => `
+      <div class="history-row">
+        <span><strong>${new Date(r.recorded_at).toLocaleTimeString()}</strong></span>
+        <span>Margin: ${r.margin.toLocaleString()}</span>
+        <span>Rounds: ${r.rounds_completed}/${r.totalRounds}</span>
+        <span>Lead: ${r.leading_candidate}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    content.innerHTML = '<div style="color:#ef4444">Error loading history.</div>';
+  }
+}
+
+function setQuery(q) {
+  document.getElementById('queryInput').value = q;
+  runQuery();
+}
+
+async function runQuery(q) {
+  const query = q || (document.getElementById('queryInput')?.value || '');
+  const meta = document.getElementById('queryMeta');
+  const result = document.getElementById('queryResult');
+  if (!query.trim()) return;
+
+  meta.textContent = 'Running...';
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    const data = await res.json();
+    meta.textContent = `SQL: ${data.sql} | ${data.count} rows`;
+    result.innerHTML = renderResultTable(data.rows);
+  } catch (e) {
+    meta.textContent = 'Error: ' + e.message;
+  }
+}
+
+function runQueryLegacy(q) {
+  runQuery(q);
+}
+
+function renderResultTable(rows) {
+  if (!rows || rows.length === 0) return '<div style="color:#6b7280">No results.</div>';
+  const cols = Object.keys(rows[0]).filter(k => k !== 'estimate');
+  return `
+    <table>
+      <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>${cols.map(c => `<td>${r[c] ?? ''}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ─── Filter Chips ───
+function getFilterState() {
+  const state = { party: '', side: 'leading', margin: '', progress: '' };
+  document.querySelectorAll('.chip.selected').forEach(chip => {
+    const cat = chip.dataset.cat;
+    const val = chip.dataset.val;
+    if (cat) state[cat] = val;
+  });
+  return state;
+}
+
+function initChipListeners() {
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const cat = chip.dataset.cat;
+      // Deselect siblings in same category
+      document.querySelectorAll(`.chip[data-cat="${cat}"]`).forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+    });
+  });
+}
+
+async function applyFilters() {
+  const f = getFilterState();
+  const meta = document.getElementById('queryMeta');
+  const result = document.getElementById('queryResult');
+  meta.textContent = 'Running...';
+  try {
+    const res = await fetch('/api/filter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(f)
+    });
+    const data = await res.json();
+    const labelParts = [];
+    if (f.party) labelParts.push(f.party.replace(/\s*-.+$/, ''));
+    if (f.side && f.side !== 'leading') labelParts.push(f.side);
+    if (f.margin) labelParts.push(f.margin);
+    if (f.progress) labelParts.push(f.progress.replace('_', ' '));
+    const label = labelParts.length > 0 ? labelParts.join(' + ') : 'All constituencies';
+    meta.textContent = `${label} | ${data.count} rows`;
+    result.innerHTML = renderResultTable(data.rows);
+  } catch (e) {
+    meta.textContent = 'Error: ' + e.message;
+  }
+}
+
+function clearFilters() {
+  document.querySelectorAll('.chip').forEach(chip => {
+    const cat = chip.dataset.cat;
+    // Select the first chip in each category (the "Any" default)
+    const siblings = document.querySelectorAll(`.chip[data-cat="${cat}"]`);
+    siblings.forEach(c => c.classList.remove('selected'));
+    siblings[0].classList.add('selected');
+  });
+  document.getElementById('queryMeta').textContent = '';
+  document.getElementById('queryResult').innerHTML = '';
+}
+
+// Poll every 2 minutes
+load();
+setInterval(load, 120000);
+initChipListeners();
+</script>
+</body>
+</html>

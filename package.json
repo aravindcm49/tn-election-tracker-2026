@@ -1,0 +1,12 @@
+{
+  "name": "tn-election-tracker",
+  "version": "1.0.0",
+  "description": "Tamil Nadu Election Results Tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0"
+  }
+}

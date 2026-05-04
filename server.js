@@ -12,6 +12,15 @@ const POLL_INTERVAL_MS = 120000;
 const constituencies = new Map();
 const history = [];
 const MAX_HISTORY = 5000;
+let isFetching = false;
+
+async function ensureData() {
+  if (constituencies.size === 0 && !isFetching) {
+    isFetching = true;
+    await fetchAndStore();
+    isFetching = false;
+  }
+}
 
 // ─── HTML Parser ───
 function parseRows(html) {
@@ -290,7 +299,7 @@ function serveStatic(filePath, res) {
   });
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
 
@@ -302,6 +311,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(204);
     res.end();
     return;
+  }
+
+  // Lazy fetch on first data request
+  if (pathname.startsWith('/api/') && pathname !== '/') {
+    await ensureData();
   }
 
   // API: all constituencies

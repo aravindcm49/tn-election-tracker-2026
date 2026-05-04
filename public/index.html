@@ -244,8 +244,14 @@ async function load() {
     renderParties();
     renderMain();
     populatePartyFilter();
+    // If data is empty, server might be cold-starting; retry in 3s
+    if (allData.length === 0) {
+      document.getElementById('lastUpdate').textContent = 'Loading data...';
+      setTimeout(load, 3000);
+    }
   } catch (e) {
     console.error(e);
+    document.getElementById('lastUpdate').textContent = 'Error loading data';
   }
 }
 

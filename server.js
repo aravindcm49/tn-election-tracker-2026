@@ -387,6 +387,11 @@ const server = http.createServer((req, res) => {
           else if (f.progress === 'nearly_done') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) >= 0.7');
         }
 
+        if (f.status) {
+          conditions.push('status = ?');
+          params.push(f.status);
+        }
+
         const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
         const sql = `SELECT *, ROUND(CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) * 100,1) as completion_pct FROM constituencies ${where} ORDER BY margin DESC`;
         const rows = db.prepare(sql).all(...params);

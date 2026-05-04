@@ -127,6 +127,11 @@
           <option value="Too Close">Too Close</option>
           <option value="Early">Early</option>
         </select>
+        <select id="filterStatus" onchange="renderMain()">
+          <option value="">All Statuses</option>
+          <option value="Result in Progress">In Progress</option>
+          <option value="Result Declared">Declared</option>
+        </select>
         <div class="count" id="mainCount"></div>
       </div>
       <div class="table-wrap" style="margin-top:.5rem">
@@ -204,6 +209,14 @@
           <span class="chip" data-cat="progress" data-val="early">Early (&lt;40%)</span>
           <span class="chip" data-cat="progress" data-val="mid">Mid (40-70%)</span>
           <span class="chip" data-cat="progress" data-val="nearly_done">Nearly Done (&gt;70%)</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Status</div>
+        <div class="filter-chips" id="statusChips">
+          <span class="chip selected" data-cat="status" data-val="">Any</span>
+          <span class="chip" data-cat="status" data-val="Result in Progress">In Progress</span>
+          <span class="chip" data-cat="status" data-val="Result Declared">Declared</span>
         </div>
       </div>
       <div class="filter-actions">
@@ -286,11 +299,13 @@ function renderMain() {
   const search = document.getElementById('search').value.toLowerCase();
   const partyFilter = document.getElementById('filterParty').value;
   const estFilter = document.getElementById('filterEstimate').value;
+  const statusFilter = document.getElementById('filterStatus').value;
 
   let filtered = allData.filter(r => {
     if (search && !r.name.toLowerCase().includes(search) && !r.leading_candidate.toLowerCase().includes(search)) return false;
     if (partyFilter && r.leading_party !== partyFilter) return false;
     if (estFilter && r.estimate?.label !== estFilter) return false;
+    if (statusFilter && r.status !== statusFilter) return false;
     return true;
   });
 
@@ -405,7 +420,7 @@ function renderResultTable(rows) {
 
 // ─── Filter Chips ───
 function getFilterState() {
-  const state = { party: '', side: 'leading', margin: '', progress: '' };
+  const state = { party: '', side: 'leading', margin: '', progress: '', status: '' };
   document.querySelectorAll('.chip.selected').forEach(chip => {
     const cat = chip.dataset.cat;
     const val = chip.dataset.val;
@@ -449,6 +464,7 @@ async function applyFilters() {
     if (f.side && f.side !== 'leading') labelParts.push(f.side);
     if (f.margin) labelParts.push(f.margin);
     if (f.progress) labelParts.push(f.progress.replace('_', ' '));
+    if (f.status) labelParts.push(f.status === 'Result Declared' ? 'Declared' : 'In Progress');
     const label = labelParts.length > 0 ? labelParts.join(' + ') : 'All constituencies';
     meta.textContent = `${label} | ${data.count} rows`;
     result.innerHTML = renderResultTable(data.rows);

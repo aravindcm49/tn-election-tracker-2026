@@ -1,90 +1,25 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
 const cheerio = require('cheerio');
 
-const PORT = 3456;
-const DB_PATH = path.join(__dirname, 'elections.db');
+const PORT = process.env.PORT || 3456;
 const ECI_BASE = 'https://results.eci.gov.in/ResultAcGenMay2026/statewiseS22';
-const ECI_PAGES = 12; // statewiseS221.htm through statewiseS2212.htm
-const POLL_INTERVAL_MS = 120000; // 2 minutes — polite to ECI servers
+const ECI_PAGES = 12;
+const POLL_INTERVAL_MS = 120000;
 
-// ─── Ensure DB exists ───
-let db;
-try {
-  db = new DatabaseSync(DB_PATH);
-} catch {
-  fs.writeFileSync(DB_PATH, '');
-  db = new DatabaseSync(DB_PATH);
-}
-
-// ─── Schema ───
-db.exec(`
-  CREATE TABLE IF NOT EXISTS constituencies (
-    name TEXT PRIMARY KEY,
-    const_no INTEGER,
-    leading_candidate TEXT,
-    leading_party TEXT,
-    trailing_candidate TEXT,
-    trailing_party TEXT,
-    margin INTEGER,
-    rounds_completed INTEGER,
-    total_rounds INTEGER,
-    status TEXT,
-    updated_at TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    leading_candidate TEXT,
-    trailing_candidate TEXT,
-    leading_party TEXT,
-    trailing_party TEXT,
-    margin INTEGER,
-    rounds_completed INTEGER,
-    total_rounds INTEGER,
-    status TEXT,
-    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_history_name ON history(name);
-  CREATE INDEX IF NOT EXISTS idx_history_time ON history(recorded_at);
-`);
-
-const insertStmt = db.prepare(`
-  INSERT INTO constituencies
-    (name, const_no, leading_candidate, leading_party, trailing_candidate, trailing_party, margin, rounds_completed, total_rounds, status, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  ON CONFLICT(name) DO UPDATE SET
-    const_no = excluded.const_no,
-    leading_candidate = excluded.leading_candidate,
-    leading_party = excluded.leading_party,
-    trailing_candidate = excluded.trailing_candidate,
-    trailing_party = excluded.trailing_party,
-    margin = excluded.margin,
-    rounds_completed = excluded.rounds_completed,
-    total_rounds = excluded.total_rounds,
-    status = excluded.status,
-    updated_at = excluded.updated_at
-`);
-
-const historyStmt = db.prepare(`
-  INSERT INTO history (name, leading_candidate, trailing_candidate, leading_party, trailing_party, margin, rounds_completed, total_rounds, status)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+// ─── In-Memory Store ───
+const constituencies = new Map();
+const history = [];
+const MAX_HISTORY = 5000;
 
 // ─── HTML Parser ───
 function parseRows(html) {
   const rows = [];
   const $ = cheerio.load(html);
-
-  // Find the main table (table-bordered distinguishes it from nested tooltip tables)
   let $mainTable = $('table.table.table-striped.table-bordered').first();
+
   if ($mainTable.length === 0) {
-    console.log('WARN: main table not found, trying fallback selector');
-    // Fallback: find table that contains the header "Constituency"
     $('table').each((i, el) => {
       if ($(el).find('th:contains("Constituency")').length > 0) {
         $mainTable = $(el);
@@ -93,17 +28,15 @@ function parseRows(html) {
     });
   }
 
-  $mainTable.find('tbody > tr').each((i, tr) => {
+  $mainTable.children('tbody').children('tr').each((i, tr) => {
     const $tds = $(tr).find('> td');
     if ($tds.length < 9) return;
 
     const name = $tds.eq(0).text().trim();
-    const constNoText = $tds.eq(1).text().trim();
-    const constNo = parseInt(constNoText, 10);
+    const constNo = parseInt($tds.eq(1).text().trim(), 10);
     if (isNaN(constNo)) return;
 
     const leadingCandidate = $tds.eq(2).text().trim();
-    // Party cells contain nested tables; grab the first plain text td inside
     const leadingParty = $tds.eq(3).find('table td').first().text().trim();
     const trailingCandidate = $tds.eq(4).text().trim();
     const trailingParty = $tds.eq(5).find('table td').first().text().trim();
@@ -121,6 +54,26 @@ function parseRows(html) {
   });
 
   return rows;
+}
+
+// ─── Win Estimate ───
+function winEstimate(row) {
+  const rc = row.rounds_completed ?? row.roundsCompleted ?? 0;
+  const tr = row.total_rounds ?? row.totalRounds ?? 1;
+  const completion = tr > 0 ? rc / tr : 0;
+  const m = row.margin || 0;
+
+  if (row.status === 'Won' || row.status === 'Result Declared') {
+    return { label: 'Declared', confidence: 100, color: '#052e16' };
+  }
+  if (completion >= 0.90 && m > 25000) return { label: 'Certain', confidence: 99, color: '#15803d' };
+  if (completion >= 0.85 && m > 15000) return { label: 'Very Likely', confidence: 95, color: '#16a34a' };
+  if (completion >= 0.75 && m > 10000) return { label: 'Likely', confidence: 88, color: '#65a30d' };
+  if (completion >= 0.65 && m > 5000)  return { label: 'Leaning', confidence: 75, color: '#84cc16' };
+  if (completion >= 0.55 && m > 2000)  return { label: 'Edge', confidence: 60, color: '#eab308' };
+  if (completion < 0.40)               return { label: 'Early', confidence: 25, color: '#9ca3af' };
+  if (m < 1000)                        return { label: 'Too Close', confidence: 45, color: '#ef4444' };
+  return { label: 'Competitive', confidence: 50, color: '#3b82f6' };
 }
 
 // ─── Fetch & Store ───
@@ -142,7 +95,6 @@ async function fetchAndStore() {
     for (let i = 1; i <= ECI_PAGES; i++) {
       const rows = await fetchPage(i);
       allRows.push(...rows);
-      // Small delay between pages to be polite
       if (i < ECI_PAGES) await new Promise(r => setTimeout(r, 300));
     }
 
@@ -152,16 +104,35 @@ async function fetchAndStore() {
     }
 
     for (const r of allRows) {
-      insertStmt.run(
-        r.name, r.constNo, r.leadingCandidate, r.leadingParty,
-        r.trailingCandidate, r.trailingParty, r.margin,
-        r.roundsCompleted, r.totalRounds, r.status
-      );
-      historyStmt.run(
-        r.name, r.leadingCandidate, r.trailingCandidate, r.leadingParty, r.trailingParty,
-        r.margin, r.roundsCompleted, r.totalRounds, r.status
-      );
+      const now = new Date().toISOString();
+      constituencies.set(r.name, {
+        name: r.name,
+        const_no: r.constNo,
+        leading_candidate: r.leadingCandidate,
+        leading_party: r.leadingParty,
+        trailing_candidate: r.trailingCandidate,
+        trailing_party: r.trailingParty,
+        margin: r.margin,
+        rounds_completed: r.roundsCompleted,
+        total_rounds: r.totalRounds,
+        status: r.status,
+        updated_at: now
+      });
+      history.push({
+        name: r.name,
+        leading_candidate: r.leadingCandidate,
+        trailing_candidate: r.trailingCandidate,
+        leading_party: r.leadingParty,
+        trailing_party: r.trailingParty,
+        margin: r.margin,
+        rounds_completed: r.roundsCompleted,
+        total_rounds: r.totalRounds,
+        status: r.status,
+        recorded_at: now
+      });
     }
+
+    while (history.length > MAX_HISTORY) history.shift();
 
     console.log(`[${new Date().toISOString()}] Stored ${allRows.length} rows`);
   } catch (err) {
@@ -169,33 +140,12 @@ async function fetchAndStore() {
   }
 }
 
-// ─── Win Estimate Helper ───
-function winEstimate(row) {
-  const rc = row.rounds_completed ?? row.roundsCompleted ?? 0;
-  const tr = row.total_rounds ?? row.totalRounds ?? 1;
-  const completion = tr > 0 ? rc / tr : 0;
-  const m = row.margin || 0;
-
-  if (row.status === 'Won' || row.status === 'Result Declared') {
-    return { label: 'Declared', confidence: 100, color: '#052e16' };
-  }
-  if (completion >= 0.90 && m > 25000) return { label: 'Certain', confidence: 99, color: '#15803d' };
-  if (completion >= 0.85 && m > 15000) return { label: 'Very Likely', confidence: 95, color: '#16a34a' };
-  if (completion >= 0.75 && m > 10000) return { label: 'Likely', confidence: 88, color: '#65a30d' };
-  if (completion >= 0.65 && m > 5000)  return { label: 'Leaning', confidence: 75, color: '#84cc16' };
-  if (completion >= 0.55 && m > 2000)  return { label: 'Edge', confidence: 60, color: '#eab308' };
-  if (completion < 0.40)               return { label: 'Early', confidence: 25, color: '#9ca3af' };
-  if (m < 1000)                        return { label: 'Too Close', confidence: 45, color: '#ef4444' };
-  return { label: 'Competitive', confidence: 50, color: '#3b82f6' };
-}
-
-// ─── NL → SQL Mapper ───
+// ─── NL → SQL Mapper (kept for legacy /api/query) ───
 function nlToSql(query) {
   const q = query.toLowerCase();
   const params = [];
   let sql = '';
 
-  // Exact-match parties (DMK/ADMK names overlap — LIKE would match both)
   const exactParties = [
     { keys: ['dmk'], name: 'Dravida Munnetra Kazhagam' },
     { keys: ['admk', 'aiadmk'], name: 'All India Anna Dravida Munnetra Kazhagam' },
@@ -217,7 +167,6 @@ function nlToSql(query) {
   };
 
   let partyExact = null;
-  // Sort keys longest-first so "admk" is checked before "dmk"
   const sortedExact = [...exactParties].sort((a, b) =>
     Math.max(...b.keys.map(k => k.length)) - Math.max(...a.keys.map(k => k.length))
   );
@@ -278,6 +227,46 @@ function nlToSql(query) {
   return { sql, params };
 }
 
+// ─── In-Memory Filter Engine ───
+function filterConstituencies(f) {
+  let rows = Array.from(constituencies.values());
+
+  if (f.party) {
+    if (f.side === 'trailing') {
+      rows = rows.filter(r => r.trailing_party === f.party);
+    } else if (f.side === 'either') {
+      rows = rows.filter(r => r.leading_party === f.party || r.trailing_party === f.party);
+    } else {
+      rows = rows.filter(r => r.leading_party === f.party);
+    }
+  }
+
+  if (f.margin) {
+    if (f.margin === 'close') rows = rows.filter(r => r.margin < 3000);
+    else if (f.margin === 'competitive') rows = rows.filter(r => r.margin >= 3000 && r.margin < 10000);
+    else if (f.margin === 'comfortable') rows = rows.filter(r => r.margin >= 10000 && r.margin < 20000);
+    else if (f.margin === 'safe') rows = rows.filter(r => r.margin >= 20000);
+  }
+
+  if (f.progress) {
+    if (f.progress === 'early') {
+      rows = rows.filter(r => (r.rounds_completed / Math.max(r.total_rounds, 1)) < 0.4);
+    } else if (f.progress === 'mid') {
+      rows = rows.filter(r => {
+        const pct = r.rounds_completed / Math.max(r.total_rounds, 1);
+        return pct >= 0.4 && pct < 0.7;
+      });
+    } else if (f.progress === 'nearly_done') {
+      rows = rows.filter(r => (r.rounds_completed / Math.max(r.total_rounds, 1)) >= 0.7);
+    } else if (f.progress === 'declared') {
+      rows = rows.filter(r => r.status === 'Result Declared');
+    }
+  }
+
+  rows.sort((a, b) => b.margin - a.margin);
+  return rows;
+}
+
 // ─── HTTP Server ───
 const MIME = {
   '.html': 'text/html',
@@ -317,11 +306,11 @@ const server = http.createServer((req, res) => {
 
   // API: all constituencies
   if (pathname === '/api/constituencies') {
-    const rows = db.prepare(`
-      SELECT *, ROUND(CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) * 100,1) as completion_pct
-      FROM constituencies ORDER BY margin DESC
-    `).all();
-    const enriched = rows.map(r => ({ ...r, estimate: winEstimate(r) }));
+    const rows = Array.from(constituencies.values()).sort((a, b) => b.margin - a.margin);
+    const enriched = rows.map(r => {
+      const completion_pct = r.total_rounds > 0 ? Math.round((r.rounds_completed / r.total_rounds) * 1000) / 10 : 0;
+      return { ...r, completion_pct, estimate: winEstimate(r) };
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(enriched));
     return;
@@ -329,12 +318,20 @@ const server = http.createServer((req, res) => {
 
   // API: party summary
   if (pathname === '/api/parties') {
-    const rows = db.prepare(`
-      SELECT leading_party as party, COUNT(*) as seats,
-        ROUND(AVG(margin),0) as avg_margin,
-        ROUND(AVG(CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) * 100),1) as avg_completion
-      FROM constituencies GROUP BY leading_party ORDER BY seats DESC
-    `).all();
+    const groups = {};
+    for (const r of constituencies.values()) {
+      const p = r.leading_party;
+      if (!groups[p]) groups[p] = { party: p, seats: 0, total_margin: 0, total_completion: 0 };
+      groups[p].seats++;
+      groups[p].total_margin += r.margin;
+      groups[p].total_completion += r.total_rounds > 0 ? (r.rounds_completed / r.total_rounds) * 100 : 0;
+    }
+    const rows = Object.values(groups).map(g => ({
+      party: g.party,
+      seats: g.seats,
+      avg_margin: Math.round(g.total_margin / g.seats),
+      avg_completion: Math.round((g.total_completion / g.seats) * 10) / 10
+    })).sort((a, b) => b.seats - a.seats);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(rows));
     return;
@@ -343,9 +340,7 @@ const server = http.createServer((req, res) => {
   // API: history for one constituency
   if (pathname.startsWith('/api/history/')) {
     const name = decodeURIComponent(pathname.slice('/api/history/'.length));
-    const rows = db.prepare(`
-      SELECT * FROM history WHERE name = ? ORDER BY recorded_at DESC LIMIT 30
-    `).all(name);
+    const rows = history.filter(h => h.name === name).sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at)).slice(0, 30);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(rows));
     return;
@@ -358,42 +353,13 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const f = JSON.parse(body);
-        const conditions = [];
-        const params = [];
-
-        if (f.party) {
-          if (f.side === 'trailing') {
-            conditions.push('trailing_party = ?');
-            params.push(f.party);
-          } else if (f.side === 'either') {
-            conditions.push('(leading_party = ? OR trailing_party = ?)');
-            params.push(f.party, f.party);
-          } else {
-            conditions.push('leading_party = ?');
-            params.push(f.party);
-          }
-        }
-
-        if (f.margin) {
-          if (f.margin === 'close') conditions.push('margin < 3000');
-          else if (f.margin === 'competitive') conditions.push('margin >= 3000 AND margin < 10000');
-          else if (f.margin === 'comfortable') conditions.push('margin >= 10000 AND margin < 20000');
-          else if (f.margin === 'safe') conditions.push('margin >= 20000');
-        }
-
-        if (f.progress) {
-          if (f.progress === 'early') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) < 0.4');
-          else if (f.progress === 'mid') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) >= 0.4 AND CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) < 0.7');
-          else if (f.progress === 'nearly_done') conditions.push('CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) >= 0.7');
-          else if (f.progress === 'declared') conditions.push("status = 'Result Declared'");
-        }
-
-        const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-        const sql = `SELECT *, ROUND(CAST(rounds_completed AS REAL) / NULLIF(total_rounds,0) * 100,1) as completion_pct FROM constituencies ${where} ORDER BY margin DESC`;
-        const rows = db.prepare(sql).all(...params);
-        const enriched = rows.map(r => ({ ...r, estimate: winEstimate(r) }));
+        const rows = filterConstituencies(f);
+        const enriched = rows.map(r => {
+          const completion_pct = r.total_rounds > 0 ? Math.round((r.rounds_completed / r.total_rounds) * 1000) / 10 : 0;
+          return { ...r, completion_pct, estimate: winEstimate(r) };
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ sql, count: enriched.length, rows: enriched }));
+        res.end(JSON.stringify({ sql: 'in-memory filter', count: enriched.length, rows: enriched }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
@@ -402,15 +368,38 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // API: natural language query
+  // API: natural language query (legacy)
   if (pathname === '/api/query' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const { query } = JSON.parse(body);
-        const { sql, params } = nlToSql(query || '');
-        const rows = db.prepare(sql).all(...params);
+        const { sql } = nlToSql(query || '');
+        // Simulate the old SQL responses using in-memory data
+        let rows = Array.from(constituencies.values());
+        if (query.toLowerCase().includes('party') && query.toLowerCase().includes('summary')) {
+          const groups = {};
+          for (const r of rows) {
+            const p = r.leading_party;
+            if (!groups[p]) groups[p] = { party: p, seats: 0, total_margin: 0, total_completion: 0 };
+            groups[p].seats++;
+            groups[p].total_margin += r.margin;
+            groups[p].total_completion += r.total_rounds > 0 ? (r.rounds_completed / r.total_rounds) * 100 : 0;
+          }
+          rows = Object.values(groups).map(g => ({
+            party: g.party,
+            seats: g.seats,
+            total_margin: g.total_margin,
+            avg_completion: Math.round((g.total_completion / g.seats) * 10) / 10
+          })).sort((a, b) => b.seats - a.seats);
+        } else {
+          rows = rows.sort((a, b) => b.margin - a.margin).slice(0, 30);
+          rows = rows.map(r => {
+            const completion_pct = r.total_rounds > 0 ? Math.round((r.rounds_completed / r.total_rounds) * 1000) / 10 : 0;
+            return { ...r, completion_pct };
+          });
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ sql, count: rows.length, rows }));
       } catch (e) {

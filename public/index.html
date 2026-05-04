@@ -38,6 +38,15 @@
   .filter-actions button:hover { background: #2c5282; }
   .filter-actions button.secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
   .filter-actions button.secondary:hover { background: #e5e7eb; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid #d1d5db; margin-bottom: .75rem; }
+  .tab { padding: .5rem 1rem; cursor: pointer; font-size: .9rem; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: #374151; }
+  .tab.active { color: #1e3a5f; border-bottom-color: #1e3a5f; font-weight: 600; }
+  .tab-panel { animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .presets { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .presets button { padding: .35rem .7rem; border: 1px solid #d1d5db; background: #f9fafb; border-radius: 4px; cursor: pointer; font-size: .8rem; }
+  .presets button:hover { background: #e5e7eb; }
   .query-result { margin-top: .75rem; overflow-x: auto; max-height: 320px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
   .query-result table { width: 100%; border-collapse: collapse; font-size: .85rem; }
   .query-result th, .query-result td { padding: .4rem .6rem; border-bottom: 1px solid #e5e7eb; text-align: left; }
@@ -98,57 +107,82 @@
   <div class="party-grid" id="partyGrid"></div>
 
   <div class="query-box">
-    <h3>Filters</h3>
-    <div class="filter-group">
-      <div class="filter-label">Party</div>
-      <div class="filter-chips" id="partyChips">
-        <span class="chip selected" data-cat="party" data-val="">Any</span>
-        <span class="chip" data-cat="party" data-val="Tamilaga Vettri Kazhagam">TVK</span>
-        <span class="chip" data-cat="party" data-val="Dravida Munnetra Kazhagam">DMK</span>
-        <span class="chip" data-cat="party" data-val="All India Anna Dravida Munnetra Kazhagam">ADMK</span>
-        <span class="chip" data-cat="party" data-val="Pattali Makkal Katchi">PMK</span>
-        <span class="chip" data-cat="party" data-val="Indian National Congress">INC</span>
-        <span class="chip" data-cat="party" data-val="Bharatiya Janata Party">BJP</span>
-        <span class="chip" data-cat="party" data-val="Communist Party of India">CPI</span>
-        <span class="chip" data-cat="party" data-val="Communist Party of India (Marxist)">CPI(M)</span>
-        <span class="chip" data-cat="party" data-val="Viduthalai Chiruthaigal Katchi">VCK</span>
-        <span class="chip" data-cat="party" data-val="Desiya Murpokku Dravida Kazhagam">DMDK</span>
-        <span class="chip" data-cat="party" data-val="Indian Union Muslim League">IUML</span>
-        <span class="chip" data-cat="party" data-val="Amma Makkal Munnettra Kazagam">AMMK</span>
+    <div class="tabs">
+      <div class="tab active" data-tab="simple" onclick="switchTab('simple')">Simple</div>
+      <div class="tab" data-tab="advanced" onclick="switchTab('advanced')">Advanced</div>
+    </div>
+
+    <!-- Simple Tab -->
+    <div id="tab-simple" class="tab-panel">
+      <div class="query-input">
+        <input type="text" id="queryInput" placeholder="e.g., Show close fights, TVK seats..." />
+        <button onclick="runQuery()">Run</button>
+      </div>
+      <div class="presets">
+        <button onclick="setQuery('Show party summary')">Party Summary</button>
+        <button onclick="setQuery('TVK leading')">TVK</button>
+        <button onclick="setQuery('DMK leading')">DMK</button>
+        <button onclick="setQuery('ADMK leading')">ADMK</button>
+        <button onclick="setQuery('Close fights')">Close Fights</button>
+        <button onclick="setQuery('High margin')">Safe Seats</button>
+        <button onclick="setQuery('Nearly complete')">Nearly Done</button>
+        <button onclick="setQuery('Early counting')">Early</button>
       </div>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">Side</div>
-      <div class="filter-chips" id="sideChips">
-        <span class="chip selected" data-cat="side" data-val="leading">Leading</span>
-        <span class="chip" data-cat="side" data-val="either">Either Side</span>
-        <span class="chip" data-cat="side" data-val="trailing">Trailing</span>
+
+    <!-- Advanced Tab -->
+    <div id="tab-advanced" class="tab-panel hidden">
+      <div class="filter-group">
+        <div class="filter-label">Party</div>
+        <div class="filter-chips" id="partyChips">
+          <span class="chip selected" data-cat="party" data-val="">Any</span>
+          <span class="chip" data-cat="party" data-val="Tamilaga Vettri Kazhagam">TVK</span>
+          <span class="chip" data-cat="party" data-val="Dravida Munnetra Kazhagam">DMK</span>
+          <span class="chip" data-cat="party" data-val="All India Anna Dravida Munnetra Kazhagam">ADMK</span>
+          <span class="chip" data-cat="party" data-val="Pattali Makkal Katchi">PMK</span>
+          <span class="chip" data-cat="party" data-val="Indian National Congress">INC</span>
+          <span class="chip" data-cat="party" data-val="Bharatiya Janata Party">BJP</span>
+          <span class="chip" data-cat="party" data-val="Communist Party of India">CPI</span>
+          <span class="chip" data-cat="party" data-val="Communist Party of India (Marxist)">CPI(M)</span>
+          <span class="chip" data-cat="party" data-val="Viduthalai Chiruthaigal Katchi">VCK</span>
+          <span class="chip" data-cat="party" data-val="Desiya Murpokku Dravida Kazhagam">DMDK</span>
+          <span class="chip" data-cat="party" data-val="Indian Union Muslim League">IUML</span>
+          <span class="chip" data-cat="party" data-val="Amma Makkal Munnettra Kazagam">AMMK</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Side</div>
+        <div class="filter-chips" id="sideChips">
+          <span class="chip selected" data-cat="side" data-val="leading">Leading</span>
+          <span class="chip" data-cat="side" data-val="either">Either Side</span>
+          <span class="chip" data-cat="side" data-val="trailing">Trailing</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Margin</div>
+        <div class="filter-chips" id="marginChips">
+          <span class="chip selected" data-cat="margin" data-val="">Any</span>
+          <span class="chip" data-cat="margin" data-val="close">Close (&lt;3k)</span>
+          <span class="chip" data-cat="margin" data-val="competitive">Competitive (3k-10k)</span>
+          <span class="chip" data-cat="margin" data-val="comfortable">Comfortable (10k-20k)</span>
+          <span class="chip" data-cat="margin" data-val="safe">Safe (&gt;20k)</span>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Progress</div>
+        <div class="filter-chips" id="progressChips">
+          <span class="chip selected" data-cat="progress" data-val="">Any</span>
+          <span class="chip" data-cat="progress" data-val="early">Early (&lt;40%)</span>
+          <span class="chip" data-cat="progress" data-val="mid">Mid (40-70%)</span>
+          <span class="chip" data-cat="progress" data-val="nearly_done">Nearly Done (&gt;70%)</span>
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button onclick="applyFilters()">Apply Filters</button>
+        <button class="secondary" onclick="clearFilters()">Clear</button>
       </div>
     </div>
-    <div class="filter-group">
-      <div class="filter-label">Margin</div>
-      <div class="filter-chips" id="marginChips">
-        <span class="chip selected" data-cat="margin" data-val="">Any</span>
-        <span class="chip" data-cat="margin" data-val="close">Close (&lt;3k)</span>
-        <span class="chip" data-cat="margin" data-val="competitive">Competitive (3k-10k)</span>
-        <span class="chip" data-cat="margin" data-val="comfortable">Comfortable (10k-20k)</span>
-        <span class="chip" data-cat="margin" data-val="safe">Safe (&gt;20k)</span>
-      </div>
-    </div>
-    <div class="filter-group">
-      <div class="filter-label">Progress</div>
-      <div class="filter-chips" id="progressChips">
-        <span class="chip selected" data-cat="progress" data-val="">Any</span>
-        <span class="chip" data-cat="progress" data-val="early">Early (&lt;40%)</span>
-        <span class="chip" data-cat="progress" data-val="mid">Mid (40-70%)</span>
-        <span class="chip" data-cat="progress" data-val="nearly_done">Nearly Done (&gt;70%)</span>
-      </div>
-    </div>
-    <div class="filter-actions">
-      <button onclick="applyFilters()">Apply Filters</button>
-      <button class="secondary" onclick="clearFilters()">Clear</button>
-      <button class="secondary" onclick="runQueryLegacy('Show party summary')">Party Summary</button>
-    </div>
+
     <div class="query-meta" id="queryMeta"></div>
     <div class="query-result" id="queryResult"></div>
   </div>
@@ -406,6 +440,13 @@ function initChipListeners() {
       chip.classList.add('selected');
     });
   });
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
+  document.getElementById('tab-' + name).classList.remove('hidden');
 }
 
 async function applyFilters() {
